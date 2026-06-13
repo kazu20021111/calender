@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ふたりのカレンダー</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fdf6f0;
+  --surface:#ffffff;
+  --border:rgba(0,0,0,0.08);
+  --border-md:rgba(0,0,0,0.14);
+  --text:#1a1918;
+  --muted:#7a7874;
+  --hint:#b0ada8;
+  --accent:#e8637a;
+  --accent-bg:#fdf0f2;
+  --accent-dark:#c44d63;
+  --radius:10px;
+  --radius-lg:16px;
+}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+
+/* Auth */
+#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
+.auth-card{background:var(--surface);border-radius:var(--radius-lg);padding:36px 32px;width:100%;max-width:380px;border:1px solid var(--border)}
+.auth-logo{text-align:center;font-size:28px;margin-bottom:6px}
+.auth-title{text-align:center;font-size:18px;font-weight:700;color:var(--accent);margin-bottom:4px}
+.auth-sub{text-align:center;font-size:12px;color:var(--muted);margin-bottom:28px}
+.auth-tabs{display:flex;gap:4px;background:var(--bg);border-radius:99px;padding:3px;margin-bottom:24px}
+.auth-tab{flex:1;padding:7px;border:none;border-radius:99px;font-family:inherit;font-size:13px;background:transparent;color:var(--muted);cursor:pointer;transition:.15s}
+.auth-tab.active{background:var(--surface);color:var(--accent);font-weight:500}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.field input{width:100%;padding:10px 12px;border:1px solid var(--border-md);border-radius:var(--radius);font-family:inherit;font-size:14px;background:var(--bg);outline:none;transition:.15s}
+.field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(232,99,122,0.12)}
+.btn-primary{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:.15s;margin-top:4px}
+.btn-primary:hover{background:var(--accent-dark)}
+.btn-primary:disabled{opacity:0.6;cursor:not-allowed}
+.auth-msg{font-size:12px;text-align:center;margin-top:12px;min-height:18px;color:var(--accent)}
+.auth-msg.err{color:#d94040}
+
+/* App */
+#app-screen{display:none}
+header{background:var(--surface);border-bottom:1px solid var(--border);height:54px;display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:100}
+.header-logo{font-size:15px;font-weight:700;color:var(--accent)}
+.header-user{font-size:12px;color:var(--muted);margin-left:auto}
+.btn-logout{font-size:12px;padding:5px 12px;border:1px solid var(--border-md);border-radius:99px;background:transparent;color:var(--muted);cursor:pointer;font-family:inherit;transition:.12s}
+.btn-logout:hover{background:var(--bg);color:var(--text)}
+
+main{max-width:680px;margin:24px auto;padding:0 16px}
+
+/* Calendar */
+.cal-card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);overflow:hidden;margin-bottom:20px}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)}
+.cal-title{font-size:16px;font-weight:700}
+.btn-nav{border:1px solid var(--border-md);background:transparent;border-radius:var(--radius);padding:5px 12px;cursor:pointer;color:var(--text);font-size:14px;transition:.12s}
+.btn-nav:hover{background:var(--bg)}
+.cal-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.cal-head th{font-size:12px;font-weight:500;color:var(--muted);padding:8px 4px;text-align:center}
+.cal-head th:first-child{color:#e05555}
+.cal-head th:last-child{color:#4477dd}
+.cal-cell{vertical-align:top;padding:4px;border-top:1px solid var(--border);min-height:76px;cursor:pointer;transition:.1s}
+.cal-cell:hover{background:var(--accent-bg)}
+.cal-cell.today{background:#fff5f7}
+.cal-cell.other-month .cal-num{opacity:0.28}
+.cal-num{font-size:12px;font-weight:500;padding:2px 5px;border-radius:99px;display:inline-block;min-width:22px;text-align:center}
+.cal-cell.today .cal-num{background:var(--accent);color:#fff}
+.cal-event{font-size:11px;padding:2px 5px;border-radius:4px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--accent-bg);color:var(--accent-dark)}
+.cal-more{font-size:10px;color:var(--hint);padding:1px 5px}
+
+/* Event panel */
+.panel-card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);overflow:hidden}
+.panel-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.panel-title{font-size:14px;font-weight:700;flex:1}
+.panel-date{font-size:13px;color:var(--muted)}
+.add-form{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap}
+.add-form input[type="text"]{flex:1;min-width:140px;padding:8px 12px;border:1px solid var(--border-md);border-radius:var(--radius);font-family:inherit;font-size:13px;background:var(--bg);outline:none}
+.add-form input[type="text"]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(232,99,122,0.12)}
+.add-form textarea{width:100%;padding:8px 12px;border:1px solid var(--border-md);border-radius:var(--radius);font-family:inherit;font-size:13px;background:var(--bg);resize:none;outline:none;height:60px}
+.add-form textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(232,99,122,0.12)}
+.btn-add{padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.btn-add:hover{background:var(--accent-dark)}
+.event-list{padding:8px 0;min-height:48px}
+.event-item{display:flex;align-items:flex-start;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border)}
+.event-item:last-child{border-bottom:none}
+.event-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:5px}
+.event-body{flex:1}
+.event-title{font-size:14px;font-weight:500}
+.event-memo{font-size:12px;color:var(--muted);margin-top:2px}
+.event-who{font-size:11px;color:var(--hint);margin-top:2px}
+.btn-del{border:none;background:transparent;color:var(--hint);cursor:pointer;padding:2px 4px;border-radius:4px;font-size:14px;line-height:1;transition:.1s}
+.btn-del:hover{color:#d94040;background:#fdf0f0}
+.empty-day{text-align:center;padding:2rem 0;color:var(--hint);font-size:13px}
+.no-date{text-align:center;padding:2rem 0;color:var(--hint);font-size:13px}
+
+@media(max-width:480px){
+  .add-form{gap:6px}
+  .auth-card{padding:28px 20px}
+}
+</style>
+</head>
+<body>
+
+<!-- Auth Screen -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">💑</div>
+    <div class="auth-title">ふたりのカレンダー</div>
+    <div class="auth-sub">二人だけの予定を共有しよう</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="switchTab('login')">ログイン</button>
+      <button class="auth-tab" id="tab-signup" onclick="switchTab('signup')">新規登録</button>
+    </div>
+
+    <div class="field">
+      <label>メールアドレス</label>
+      <input type="email" id="email" placeholder="example@email.com" />
+    </div>
+    <div class="field">
+      <label>パスワード</label>
+      <input type="password" id="password" placeholder="6文字以上" onkeydown="if(event.key==='Enter')submitAuth()" />
+    </div>
+
+    <button class="btn-primary" id="auth-btn" onclick="submitAuth()">ログイン</button>
+    <div class="auth-msg" id="auth-msg"></div>
+  </div>
+</div>
+
+<!-- App Screen -->
+<div id="app-screen">
+  <header>
+    <div class="header-logo">💑 ふたりのカレンダー</div>
+    <div class="header-user" id="user-email"></div>
+    <button class="btn-logout" onclick="logout()">ログアウト</button>
+  </header>
+
+  <main>
+    <div class="cal-card">
+      <div class="cal-nav">
+        <button class="btn-nav" onclick="calMove(-1)">◀</button>
+        <div class="cal-title" id="calTitle"></div>
+        <button class="btn-nav" onclick="calMove(1)">▶</button>
+      </div>
+      <table class="cal-table">
+        <thead><tr class="cal-head" id="calHead"></tr></thead>
+        <tbody id="calBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-header">
+        <div class="panel-title" id="panelTitle">日付を選んで予定を追加</div>
+      </div>
+      <div id="panelContent">
+        <div class="no-date">カレンダーの日付をタップしてください</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://lzwhirsribfvquuxnxus.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6d2hpcnNyaWJmdnF1dXhueHVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNDE1NTMsImV4cCI6MjA5NjkxNzU1M30.0juBMNtVrYdjeeK2uvBN_9aZ3QVZhnlzuUKPLmohSTw';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+let calYear, calMonth;
+let selectedDate = null;
+let events = [];
+let authMode = 'login';
+
+const today = new Date();
+calYear = today.getFullYear();
+calMonth = today.getMonth();
+
+// Auth
+function switchTab(mode) {
+  authMode = mode;
+  document.getElementById('tab-login').classList.toggle('active', mode === 'login');
+  document.getElementById('tab-signup').classList.toggle('active', mode === 'signup');
+  document.getElementById('auth-btn').textContent = mode === 'login' ? 'ログイン' : '新規登録';
+  document.getElementById('auth-msg').textContent = '';
+  document.getElementById('auth-msg').className = 'auth-msg';
+}
+
+async function submitAuth() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const btn = document.getElementById('auth-btn');
+  const msg = document.getElementById('auth-msg');
+  if (!email || !password) { showMsg('メールとパスワードを入力してください', true); return; }
+  btn.disabled = true;
+  btn.textContent = '処理中…';
+  msg.textContent = '';
+
+  let res;
+  if (authMode === 'login') {
+    res = await sb.auth.signInWithPassword({ email, password });
+  } else {
+    res = await sb.auth.signUp({ email, password });
+  }
+
+  btn.disabled = false;
+  btn.textContent = authMode === 'login' ? 'ログイン' : '新規登録';
+
+  if (res.error) {
+    const errMap = {
+      'Invalid login credentials': 'メールまたはパスワードが違います',
+      'User already registered': 'このメールはすでに登録済みです',
+      'Password should be at least 6 characters': 'パスワードは6文字以上にしてください',
+    };
+    showMsg(errMap[res.error.message] || res.error.message, true);
+  } else if (authMode === 'signup' && !res.data.session) {
+    showMsg('確認メールを送りました。メールのリンクをクリックしてください', false);
+  }
+}
+
+function showMsg(text, isErr) {
+  const el = document.getElementById('auth-msg');
+  el.textContent = text;
+  el.className = 'auth-msg' + (isErr ? ' err' : '');
+}
+
+async function logout() {
+  await sb.auth.signOut();
+}
+
+// Session listener
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session) {
+    currentUser = session.user;
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+    document.getElementById('user-email').textContent = currentUser.email;
+    await loadEvents();
+    renderCal();
+  } else {
+    currentUser = null;
+    document.getElementById('auth-screen').style.display = 'flex';
+    document.getElementById('app-screen').style.display = 'none';
+  }
+});
+
+// Events
+async function loadEvents() {
+  const { data } = await sb.from('events').select('*').order('created_at');
+  events = data || [];
+}
+
+async function addEvent() {
+  const titleEl = document.getElementById('newTitle');
+  const memoEl = document.getElementById('newMemo');
+  const title = titleEl.value.trim();
+  if (!title || !selectedDate) return;
+  const { data, error } = await sb.from('events').insert({
+    user_id: currentUser.id,
+    title,
+    date: selectedDate,
+    memo: memoEl.value.trim() || null
+  }).select().single();
+  if (!error && data) {
+    events.push(data);
+    titleEl.value = '';
+    memoEl.value = '';
+    renderPanel();
+    renderCal();
+  }
+}
+
+async function deleteEvent(id) {
+  const { error } = await sb.from('events').delete().eq('id', id);
+  if (!error) {
+    events = events.filter(e => e.id !== id);
+    renderPanel();
+    renderCal();
+  }
+}
+
+// Calendar
+function calMove(d) {
+  calMonth += d;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCal();
+}
+
+function renderCal() {
+  document.getElementById('calTitle').textContent = calYear + '年' + (calMonth + 1) + '月';
+  const head = document.getElementById('calHead');
+  head.innerHTML = ['日','月','火','水','木','金','土'].map(d => `<th>${d}</th>`).join('');
+
+  const first = new Date(calYear, calMonth, 1);
+  const last = new Date(calYear, calMonth + 1, 0);
+  const todayStr = today.toISOString().slice(0, 10);
+
+  let cells = [];
+  for (let i = 0; i < first.getDay(); i++)
+    cells.push({ date: new Date(calYear, calMonth, 1 - first.getDay() + i), cur: false });
+  for (let d = 1; d <= last.getDate(); d++)
+    cells.push({ date: new Date(calYear, calMonth, d), cur: true });
+  while (cells.length % 7 !== 0)
+    cells.push({ date: new Date(calYear, calMonth + 1, cells.length - first.getDay() - last.getDate() + 1), cur: false });
+
+  let rows = '';
+  for (let r = 0; r < cells.length / 7; r++) {
+    rows += '<tr>';
+    for (let c = 0; c < 7; c++) {
+      const cell = cells[r * 7 + c];
+      const ds = cell.date.toISOString().slice(0, 10);
+      const isToday = ds === todayStr;
+      const isSel = ds === selectedDate;
+      const dayEvs = events.filter(e => e.date === ds);
+      rows += `<td class="cal-cell${isToday ? ' today' : ''}${!cell.cur ? ' other-month' : ''}"
+        style="${isSel ? 'background:var(--accent-bg);outline:2px solid var(--accent);outline-offset:-2px;border-radius:4px;' : ''}"
+        onclick="selectDate('${ds}')">
+        <span class="cal-num">${cell.date.getDate()}</span>
+        ${dayEvs.slice(0, 2).map(e => `<div class="cal-event">${esc(e.title)}</div>`).join('')}
+        ${dayEvs.length > 2 ? `<div class="cal-more">+${dayEvs.length - 2}</div>` : ''}
+      </td>`;
+    }
+    rows += '</tr>';
+  }
+  document.getElementById('calBody').innerHTML = rows;
+}
+
+function selectDate(ds) {
+  selectedDate = ds;
+  renderCal();
+  renderPanel();
+}
+
+function renderPanel() {
+  if (!selectedDate) return;
+  const d = new Date(selectedDate + 'T00:00:00');
+  const label = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  document.getElementById('panelTitle').textContent = label + ' の予定';
+
+  const dayEvs = events.filter(e => e.date === selectedDate);
+  const isMine = (e) => e.user_id === currentUser.id;
+
+  document.getElementById('panelContent').innerHTML = `
+    <div class="add-form">
+      <input type="text" id="newTitle" placeholder="予定のタイトル" onkeydown="if(event.key==='Enter')addEvent()" />
+      <button class="btn-add" onclick="addEvent()">追加</button>
+      <textarea id="newMemo" placeholder="メモ（任意）"></textarea>
+    </div>
+    <div class="event-list">
+      ${dayEvs.length === 0
+        ? '<div class="empty-day">この日の予定はまだありません</div>'
+        : dayEvs.map(e => `
+          <div class="event-item">
+            <div class="event-dot" style="${isMine(e) ? '' : 'background:#7a7874;'}"></div>
+            <div class="event-body">
+              <div class="event-title">${esc(e.title)}</div>
+              ${e.memo ? `<div class="event-memo">${esc(e.memo)}</div>` : ''}
+              <div class="event-who">${isMine(e) ? 'あなた' : 'パートナー'}</div>
+            </div>
+            ${isMine(e) ? `<button class="btn-del" onclick="deleteEvent('${e.id}')" aria-label="削除">✕</button>` : ''}
+          </div>`).join('')
+      }
+    </div>`;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
