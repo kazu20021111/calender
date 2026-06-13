@@ -339,6 +339,32 @@ function calMove(d){
 
 function yearMove(d){yearViewYear+=d;renderYear();}
 function goToMonth(y,m){calYear=parseInt(y);calMonth=parseInt(m);switchView('month');}
+function renderYear(){
+  document.getElementById('yearTitle').textContent=yearViewYear+'年';
+  const today=todayStr();
+  const annDates=getAnniversaryDates(yearViewYear);
+  const yr=yearViewYear;
+  let gridHtml='';
+  for(let m=0;m<12;m++){
+    const firstDay=new Date(yr,m,1).getDay();
+    const lastDate=new Date(yr,m+1,0).getDate();
+    let cells=[];
+    for(let i=0;i<firstDay;i++)cells.push({num:'',cur:false,ds:'',dow:i});
+    for(let d=1;d<=lastDate;d++){const ds=localDateStr(new Date(yr,m,d));cells.push({num:d,cur:true,ds,dow:(firstDay+d-1)%7});}
+    while(cells.length%7!==0)cells.push({num:'',cur:false,ds:'',dow:cells.length%7});
+    const hasEv=events.some(e=>e.date&&e.date.startsWith(yr+'-'+String(m+1).padStart(2,'0')));
+    let daysHtml='';
+    ['日','月','火','水','木','金','土'].forEach(d=>{daysHtml+='<div class="mini-head">'+d+'</div>';});
+    cells.forEach(cell=>{
+      const isToday=cell.ds===today,isAnn=cell.ds&&annDates.has(cell.ds),hasEvent=cell.ds&&events.some(e=>e.date===cell.ds);
+      const cls=['mini-day',cell.dow===0?'sun':cell.dow===6?'sat':'',!cell.cur?'other':'',isToday?'is-today':'',isAnn&&!isToday?'is-ann':'',hasEvent&&!isToday&&!isAnn?'has-event':''].filter(Boolean).join(' ');
+      daysHtml+='<div class="'+cls+'">'+cell.num+'</div>';
+    });
+    gridHtml+='<div class="mini-cal" onclick="calYear='+yr+';calMonth='+m+';switchView('month')"><div class="mini-cal-title" style="pointer-events:none">'+(m+1)+'月'+(hasEv?'<span style="color:var(--accent)">&#9679;</span>':'')+'</div><div class="mini-cal-grid" style="pointer-events:none">'+daysHtml+'</div></div>';
+  }
+  document.getElementById('yearGrid').innerHTML=gridHtml;
+}
+
 
 function renderCal(){
   document.getElementById('calTitle').textContent=calYear+'年'+(calMonth+1)+'月 ▾';
@@ -372,35 +398,6 @@ function renderCal(){
   document.getElementById('calBody').innerHTML=rows;
 }
 
-function renderYear(){
-  document.getElementById('yearTitle').textContent=yearViewYear+'年';
-  const today=todayStr();
-  const annDates=getAnniversaryDates(yearViewYear);
-  const grid=document.getElementById('yearGrid');
-  grid.innerHTML='';
-  for(let m=0;m<12;m++){
-    const firstDay=new Date(yearViewYear,m,1).getDay();
-    const lastDate=new Date(yearViewYear,m+1,0).getDate();
-    let cells=[];
-    for(let i=0;i<firstDay;i++)cells.push({num:'',cur:false,ds:'',dow:i});
-    for(let d=1;d<=lastDate;d++){const ds=localDateStr(new Date(yearViewYear,m,d));cells.push({num:d,cur:true,ds,dow:(firstDay+d-1)%7});}
-    while(cells.length%7!==0)cells.push({num:'',cur:false,ds:'',dow:cells.length%7});
-    const hasEv=events.some(e=>e.date&&e.date.startsWith(`${yearViewYear}-${String(m+1).padStart(2,'0')}`));
-    const div=document.createElement('div');
-    div.className='mini-cal';
-    div.setAttribute('onclick', `goToMonth(${yearViewYear},${m})`);
-    let html=`<div class="mini-cal-title">${m+1}月${hasEv?' <span style="color:var(--accent)">●</span>':''}</div><div class="mini-cal-grid">`;
-    ['日','月','火','水','木','金','土'].forEach(d=>{html+=`<div class="mini-head">${d}</div>`;});
-    cells.forEach(cell=>{
-      const isToday=cell.ds===today,isAnn=cell.ds&&annDates.has(cell.ds),hasEvent=cell.ds&&events.some(e=>e.date===cell.ds);
-      const cls=['mini-day',cell.dow===0?'sun':cell.dow===6?'sat':'',!cell.cur?'other':'',isToday?'is-today':'',isAnn&&!isToday?'is-ann':'',hasEvent&&!isToday&&!isAnn?'has-event':''].filter(Boolean).join(' ');
-      html+=`<div class="${cls}">${cell.num}</div>`;
-    });
-    html+=`</div>`;
-    div.innerHTML=html;
-    grid.appendChild(div);
-  }
-}
 
 function selectDate(ds){selectedDate=ds;renderCal();renderPanel();}
 
