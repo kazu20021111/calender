@@ -384,7 +384,8 @@ function renderYear(){
     const hasEv=events.some(e=>e.date&&e.date.startsWith(`${yearViewYear}-${String(m+1).padStart(2,'0')}`));
     const div=document.createElement('div');
     div.className='mini-cal';
-    div.onclick=()=>{calYear=yearViewYear;calMonth=m;switchView('month');};
+    div.dataset.month=m;
+    div.onclick=function(){calYear=yearViewYear;calMonth=parseInt(this.dataset.month);switchView('month');};
     let html=`<div class="mini-cal-title">${m+1}月${hasEv?' <span style="color:var(--accent)">●</span>':''}</div><div class="mini-cal-grid">`;
     ['日','月','火','水','木','金','土'].forEach(d=>{html+=`<div class="mini-head">${d}</div>`;});
     cells.forEach(cell=>{
