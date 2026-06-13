@@ -2,14 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-<meta http-equiv="Pragma" content="no-cache" />
-<meta http-equiv="Expires" content="0" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>ふたりのカレンダー</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -19,7 +13,8 @@
   --radius:10px;--radius-lg:16px;
 }
 body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
-#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
+#loading-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;font-size:14px;color:var(--muted);}
+#auth-screen{display:none;align-items:center;justify-content:center;min-height:100vh;padding:16px}
 .auth-card{background:var(--surface);border-radius:var(--radius-lg);padding:36px 32px;width:100%;max-width:380px;border:1px solid var(--border)}
 .auth-logo{text-align:center;font-size:28px;margin-bottom:6px}
 .auth-title{text-align:center;font-size:18px;font-weight:700;color:var(--accent);margin-bottom:4px}
@@ -89,6 +84,8 @@ main{max-width:680px;margin:24px auto;padding:0 16px}
 </head>
 <body>
 
+<div id="loading-screen">読み込み中…</div>
+
 <div id="auth-screen">
   <div class="auth-card">
     <div class="auth-logo">💑</div>
@@ -109,7 +106,7 @@ main{max-width:680px;margin:24px auto;padding:0 16px}
   <header>
     <div class="header-logo">💑 ふたりのカレンダー</div>
     <div class="header-user" id="user-email"></div>
-    <button class="btn-logout" onclick="logout()">ログアウト</button>
+    <button class="btn-logout" id="logout-btn">ログアウト</button>
   </header>
   <main>
     <div class="cal-card">
@@ -135,14 +132,12 @@ main{max-width:680px;margin:24px auto;padding:0 16px}
 <script>
 const SUPABASE_URL = 'https://lzwhirsribfvquuxnxus.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6d2hpcnNyaWJmdnF1dXhueHVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNDE1NTMsImV4cCI6MjA5NjkxNzU1M30.0juBMNtVrYdjeeK2uvBN_9aZ3QVZhnlzuUKPLmohSTw';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let currentUser = null;
-let calYear, calMonth;
-let selectedDate = null;
-let events = [];
-let authMode = 'login';
-let tempId = 0;
+let sb, currentUser = null, calYear, calMonth, selectedDate = null, events = [], authMode = 'login', tempId = 0;
+
+const now = new Date();
+calYear = now.getFullYear();
+calMonth = now.getMonth();
 
 function todayStr() { return localDateStr(new Date()); }
 function localDateStr(d) {
@@ -153,9 +148,19 @@ function dateLabel(ds) {
   return `${y}年${parseInt(m)}月${parseInt(d)}日`;
 }
 
-const now = new Date();
-calYear = now.getFullYear();
-calMonth = now.getMonth();
+function showScreen(name) {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = name === 'auth' ? 'flex' : 'none';
+  document.getElementById('app-screen').style.display = name === 'app' ? 'block' : 'none';
+}
+
+async function initApp(user) {
+  currentUser = user;
+  document.getElementById('user-email').textContent = user.email;
+  await loadEvents();
+  renderCal();
+  showScreen('app');
+}
 
 function switchTab(mode) {
   authMode = mode;
@@ -180,7 +185,9 @@ async function submitAuth() {
   if (res.error) {
     const m = {'Invalid login credentials':'メールまたはパスワードが違います','User already registered':'このメールはすでに登録済みです'};
     showMsg(m[res.error.message] || res.error.message, true);
-  } else if (authMode==='signup' && !res.data.session) {
+  } else if (res.data.session) {
+    await initApp(res.data.session.user);
+  } else {
     showMsg('確認メールを送りました', false);
   }
 }
@@ -191,23 +198,13 @@ function showMsg(text, isErr) {
   el.className = 'auth-msg' + (isErr ? ' err' : '');
 }
 
-async function logout() { await sb.auth.signOut(); }
-
-sb.auth.onAuthStateChange(async (event, session) => {
-  if (session) {
-    currentUser = session.user;
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app-screen').style.display = 'block';
-    document.getElementById('user-email').textContent = currentUser.email;
-    await loadEvents();
-    renderCal();
-  } else {
-    currentUser = null;
-    document.getElementById('auth-screen').style.display = 'flex';
-    document.getElementById('app-screen').style.display = 'none';
-    events = []; selectedDate = null;
-  }
-});
+async function logout() {
+  await sb.auth.signOut();
+  currentUser = null;
+  events = [];
+  selectedDate = null;
+  showScreen('auth');
+}
 
 async function loadEvents() {
   const { data, error } = await sb.from('events').select('*').order('created_at');
@@ -220,12 +217,10 @@ async function addEvent() {
   const title = titleEl.value.trim();
   if (!title || !selectedDate) return;
 
-  // 楽観的更新：即座に画面に反映
   const tmp = {
     id: 'tmp-' + (++tempId),
     user_id: currentUser.id,
-    title,
-    date: selectedDate,
+    title, date: selectedDate,
     memo: memoEl.value.trim() || null,
     saving: true
   };
@@ -235,7 +230,6 @@ async function addEvent() {
   renderPanel();
   renderCal();
 
-  // 裏でSupabaseに保存
   const { data, error } = await sb.from('events').insert({
     user_id: currentUser.id,
     title: tmp.title,
@@ -243,10 +237,8 @@ async function addEvent() {
     memo: tmp.memo
   }).select().single();
 
-  // 仮IDを本物のIDに差し替え
   const idx = events.findIndex(e => e.id === tmp.id);
   if (error) {
-    // 失敗したら取り消し
     if (idx !== -1) events.splice(idx, 1);
     alert('追加できませんでした: ' + error.message);
   } else {
@@ -257,17 +249,14 @@ async function addEvent() {
 }
 
 async function deleteEvent(id) {
-  // 楽観的更新：即座に削除
   const backup = events.find(e => e.id === id);
   events = events.filter(e => e.id !== id);
   renderPanel();
   renderCal();
-
   const { error } = await sb.from('events').delete().eq('id', id).eq('user_id', currentUser.id);
   if (error) {
-    // 失敗したら戻す
     if (backup) events.push(backup);
-    alert('削除できませんでした: ' + error.message);
+    alert('削除できませんでした');
     renderPanel();
     renderCal();
   }
@@ -283,11 +272,9 @@ function calMove(d) {
 function renderCal() {
   document.getElementById('calTitle').textContent = calYear+'年'+(calMonth+1)+'月';
   document.getElementById('calHead').innerHTML = ['日','月','火','水','木','金','土'].map(d=>`<th>${d}</th>`).join('');
-
   const firstDay = new Date(calYear, calMonth, 1).getDay();
   const lastDate = new Date(calYear, calMonth+1, 0).getDate();
   const today = todayStr();
-
   let cells = [];
   for (let i=0; i<firstDay; i++) {
     const d = new Date(calYear, calMonth, 1-firstDay+i);
@@ -301,7 +288,6 @@ function renderCal() {
     const d = new Date(calYear, calMonth+1, nd++);
     cells.push({ds:localDateStr(d), cur:false, num:d.getDate()});
   }
-
   let rows='';
   for (let r=0; r<cells.length/7; r++) {
     rows += '<tr>';
@@ -334,7 +320,6 @@ function renderPanel() {
   document.getElementById('panelTitle').textContent = dateLabel(selectedDate)+' の予定';
   const dayEvs = events.filter(e=>e.date===selectedDate);
   const isMine = e => e.user_id===currentUser.id;
-
   document.getElementById('panelContent').innerHTML = `
     <div class="add-form">
       <input type="text" id="newTitle" placeholder="予定のタイトル" onkeydown="if(event.key==='Enter')addEvent()" />
@@ -361,6 +346,39 @@ function renderPanel() {
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// 起動処理
+(async () => {
+  // Supabaseを動的に読み込む
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+      persistSession: true,
+      storageKey: 'couple-calendar-auth',
+      storage: window.localStorage,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    }
+  });
+
+  // ログアウトボタンをここで設定
+  document.getElementById('logout-btn').addEventListener('click', logout);
+
+  // 既存セッションを確認
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    await initApp(session.user);
+  } else {
+    showScreen('auth');
+  }
+})();
 </script>
 </body>
 </html>
