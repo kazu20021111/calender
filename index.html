@@ -338,6 +338,7 @@ function calMove(d){
 }
 
 function yearMove(d){yearViewYear+=d;renderYear();}
+function goToMonth(y,m){calYear=parseInt(y);calMonth=parseInt(m);switchView('month');}
 
 function renderCal(){
   document.getElementById('calTitle').textContent=calYear+'年'+(calMonth+1)+'月 ▾';
@@ -387,7 +388,7 @@ function renderYear(){
     const hasEv=events.some(e=>e.date&&e.date.startsWith(`${yearViewYear}-${String(m+1).padStart(2,'0')}`));
     const div=document.createElement('div');
     div.className='mini-cal';
-    div.setAttribute('onclick', `calYear=${yearViewYear};calMonth=${m};switchView('month');`);
+    div.setAttribute('onclick', `goToMonth(${yearViewYear},${m})`);
     let html=`<div class="mini-cal-title">${m+1}月${hasEv?' <span style="color:var(--accent)">●</span>':''}</div><div class="mini-cal-grid">`;
     ['日','月','火','水','木','金','土'].forEach(d=>{html+=`<div class="mini-head">${d}</div>`;});
     cells.forEach(cell=>{
